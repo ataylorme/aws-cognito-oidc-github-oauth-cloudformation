@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ataylorme/aws-cognito-oidc-github-oauth-cloudformation
+
+  SAM Template for Cognito OIDC Provider with GitHub OAuth
+
+Parameters:
+  StackEnv:
+    Type: String
+    Default: prod
+  GitHubAuthProxyApiGatewayName:
+    Type: String
+    Default: github-auth-proxy-api-gateway
+  GitHubTokenProxyLambdaName:
+    Type: String
+    Default: gh-token-proxy-lambda
+  GitHubUserInfoLambdaName:
+    Type: String
+    Default: gh-userinfo-lambda
+  CognitoUserPoolName:
+    Type: String
+    Default: gh-admin-cognito-user-pool
+  CognitoPoolDomain:
+    Type: String
+    Description: The Cognito Domain
+  GitHubClientId:
+    Type: String
+    Description: The GitHub OAuth app client id.
+  GitHubClientSecret:
+    Type: String
+    Description: The GitHub OAuth app client secret.
+
+Globals:
+  Function:
+    AutoPublishAlias: live
+    Handler: index.handler
+    Runtime: nodejs20.x
+    Timeout: 300
+    Architectures:
+      - arm64
+    Tags:
+      Application: !Ref AWS::StackName
+
+Resources:
+  GitHubAuthProxyApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "${GitHubAuthProxyApiGatewayName}-${StackEnv}"
+      StageName: !Sub "${StackEnv}"
+      Tags:
+        Application: !Ref AWS::StackName
+
+  GitHubTokenProxyLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${GitHubTokenProxyLambdaName}-${StackEnv}"
+      CodeUri: ./dist/github-token-proxy/
+      Events:
+        PostGitHubTokenProxyEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref GitHubAuthProxyApiGateway
+            Path: /auth/github-token-proxy
+            Method: post
+
+  GitHubUserInfoLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${GitHubUserInfoLambdaName}-${StackEnv}"
+      CodeUri: ./dist/github-userinfo-proxy/
+      Events:
+        PostGitHubUserInfoEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref GitHubAuthProxyApiGateway
+            Path: /auth/github-userinfo-proxy
+            Method: get
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${CognitoUserPoolName}-${StackEnv}"
+      MfaConfiguration: 'OFF'
+      AutoVerifiedAttributes:
+        - email
+      DeletionProtection: 'INACTIVE'
+      UsernameConfiguration:
+        CaseSensitive: true
+      Schema:
+        - Name: githubAccessToken
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+
+  CognitoUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "${CognitoPoolDomain}-${StackEnv}"
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: UserPoolGitHubOIDCProvider
+    Properties:
+      ClientName: !Sub "${CognitoUserPoolName}-Client-${StackEnv}"
+      GenerateSecret: false
+      UserPoolId: !Ref CognitoUserPool
+      SupportedIdentityProviders:
+        - GitHub
+      PreventUserExistenceErrors: "ENABLED"
+      AccessTokenValidity: 24
+      IdTokenValidity: 24
+      RefreshTokenValidity: 1
+      AllowedOAuthFlowsUserPoolClient: True
+      AllowedOAuthFlows:
+        - implicit
+      AllowedOAuthScopes:
+        - openid
+        - profile
+        - email
+      DefaultRedirectURI: "http://localhost:3000/"
+      CallbackURLs:
+        - "http://localhost:3000/"
+
+  UserPoolGitHubOIDCProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ProviderName: GitHub
+      ProviderType: OIDC
+      ProviderDetails:
+        oidc_issuer: "https://github.com"
+        client_id: !Sub "${GitHubClientId}"
+        client_secret: !Sub "${GitHubClientSecret}"
+        attributes_request_method: GET
+        # https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps
+        authorize_scopes: "openid user read:user user:email admin:org repo workflow"
+        authorize_url: "https://github.com/login/oauth/authorize"
+        jwks_uri: "https://token.actions.githubusercontent.com/.well-known/jwks.json"
+        token_url: !Sub "https://${GitHubAuthProxyApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${StackEnv}/auth/github-token-proxy"
+        attributes_url: !Sub "https://${GitHubAuthProxyApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${StackEnv}/auth/github-userinfo-proxy"
+      AttributeMapping:
+        username: sub
+        email: email
+        name: name
+        picture: avatar_url
+        "custom:githubAccessToken": githubAccessToken
+
+Outputs:
+  UserPoolId:
+    Description: The Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+
+  UserPoolClientId:
+    Description: The Cognito User Pool Client Id
+    Value: !GetAtt CognitoUserPoolClient.ClientId
+
+  UserPoolProviderURL:
+    Description: The Provider Url for the Cognito User Pool
+    Value: !GetAtt CognitoUserPool.ProviderURL
+
+  CognitoHostedLoginUI:
+    Description: The Cognito Hosted Login UI URL
+    Value: !Sub 
+      - "https://${CognitoPoolDomain}-${StackEnv}.auth.${AWS::Region}.amazoncognito.com/oauth2/authorize?client_id=${ClientId}&response_type=token&scope=email+openid+profile&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2F"
+      - ClientId: !GetAtt CognitoUserPoolClient.ClientId
+
+  GitHubAuthProxyApiGatewayEndpoint:
+    Description: GitHub Auth Proxy API Gateway endpoint URL
+    Value: !Sub "https://${GitHubAuthProxyApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${StackEnv}/"
