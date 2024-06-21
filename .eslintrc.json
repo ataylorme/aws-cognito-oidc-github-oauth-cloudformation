@@ -1,0 +1,44 @@
+{
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint", "prettier", "sonarjs"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:sonarjs/recommended",
+    "prettier",
+    "plugin:prettier/recommended"
+  ],
+  "rules": {
+    "prettier/prettier": [
+      "error",
+      {
+        "singleQuote": true,
+        "trailingComma": "all",
+        "bracketSpacing": false,
+        "printWidth": 120,
+        "tabWidth": 2,
+        "semi": false
+      }
+    ],
+    "sonarjs/no-duplicate-string": ["warn"],
+    "sonarjs/max-switch-cases": ["warn", 5],
+    "sonarjs/cognitive-complexity": "warn", // how difficut is it to understand your code
+    "max-lines-per-function": ["warn", 50], //builtin eslint rule
+    "complexity": ["warn", 5], //builtin eslint rule - cyclomatic complexity - how many paths/branches does your code have, increases unit testing complexity
+    "require-await": ["warn"], 
+    "@typescript-eslint/no-floating-promises": ["warn"],
+    "max-params":["warn", 4],
+    // octokit/rest requires parameters that are not in camelCase
+    "camelcase": "off"
+  },
+  "env": {
+    "node": true,
+    "jest": true,
+    "es6": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2018,
+    "sourceType": "module",
+    "project": ["tsconfig.json"]
+  }
+}

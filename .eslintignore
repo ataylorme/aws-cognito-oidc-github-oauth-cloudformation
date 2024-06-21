@@ -1,0 +1,8 @@
+*.js
+!/.github
+src/apiGenerated/*.ts
+src/common/apiClient/dist/
+
+src/lambdas/**/*.test.ts
+src/lambdas/**/*mock*.ts
+src/__tests__/setup.ts

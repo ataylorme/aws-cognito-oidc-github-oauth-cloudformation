@@ -1,0 +1,21 @@
+{
+  "extends": "@tsconfig/node20/tsconfig",
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "noImplicitAny": true,
+    "removeComments": true,
+    "declaration": false,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "module": "es2022"
+  },
+  "types": [
+    "node"
+  ],
+  "paths": {
+    "@src/*": ["src/*"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.mts", "prisma/**/*.ts", "jest.config.ts"],
+  "exclude": ["node_modules", "dist", ".github", ".git", "src/__tests__/**/*"]
+}
